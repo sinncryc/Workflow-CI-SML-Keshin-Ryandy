@@ -7,6 +7,9 @@ on:
       - master
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   train-build-push:
     runs-on: ubuntu-latest
@@ -25,15 +28,14 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r MLProject/requirements.txt
 
-      - name: Train model and save MLflow model artifact
-        working-directory: MLProject
+      - name: Train model using MLflow Project
         env:
           MLFLOW_TRACKING_MODE: ci
         run: |
-          python modelling.py
-          test -f model_export/MLmodel
-          test -f model_export/conda.yaml
-          test -f model_export/requirements.txt
+          mlflow run MLProject --env-manager=local
+          test -f MLProject/model_export/MLmodel
+          test -f MLProject/model_export/conda.yaml
+          test -f MLProject/model_export/requirements.txt
 
       - name: Upload MLflow model artifact
         uses: actions/upload-artifact@v4
