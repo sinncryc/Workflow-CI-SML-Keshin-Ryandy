@@ -1,37 +1,3 @@
-"""
-modelling.py
-Final CI version for Kriteria 3 Advanced.
-
-Fungsi utama:
-1. Melatih model Random Forest menggunakan dataset hasil preprocessing.
-2. Melakukan manual logging ke MLflow.
-3. Menyimpan artifact tambahan.
-4. Mengekspor model ke folder model_export agar menghasilkan:
-   - MLmodel
-   - conda.yaml
-   - model.pkl
-   - python_env.yaml
-   - requirements.txt
-5. Siap digunakan oleh GitHub Actions dan mlflow models build-docker.
-
-Struktur folder yang diasumsikan:
-MLProject/
-├── modelling.py
-├── requirements.txt
-├── titanic_preprocessing/
-│   ├── train_preprocessed.csv
-│   └── test_preprocessed.csv
-└── .github/workflows/ci-cd.yml
-
-Cara run lokal untuk CI mode:
-PowerShell:
-$env:MLFLOW_TRACKING_MODE="ci"
-python modelling.py
-
-Git Bash:
-MLFLOW_TRACKING_MODE=ci python modelling.py
-"""
-
 from pathlib import Path
 import os
 import json
@@ -58,9 +24,7 @@ from sklearn.metrics import (
 from sklearn.utils import estimator_html_repr
 
 
-# =========================
-# CONFIGURATION
-# =========================
+# 
 warnings.filterwarnings("ignore")
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -85,12 +49,7 @@ logging.basicConfig(
 # MLFLOW SETUP
 # =========================
 def setup_mlflow():
-    """
-    Tracking mode:
-    - ci      : file-based MLflow tracking for GitHub Actions.
-    - local   : localhost MLflow UI, requires mlflow ui running on 127.0.0.1:5000.
-    - dagshub : online MLflow tracking with DagsHub.
-    """
+
     tracking_mode = os.getenv("MLFLOW_TRACKING_MODE", "ci").lower()
 
     if tracking_mode == "dagshub":
@@ -102,19 +61,20 @@ def setup_mlflow():
             mlflow=True
         )
         logging.info("MLflow tracking connected to DagsHub.")
+        mlflow.set_experiment("Titanic Random Forest CI")
 
     elif tracking_mode == "local":
         mlflow.set_tracking_uri("http://127.0.0.1:5000/")
         logging.info("MLflow tracking URI set to http://127.0.0.1:5000/")
+        mlflow.set_experiment("Titanic Random Forest CI")
 
     else:
-        # Mode utama untuk GitHub Actions CI.
-        # Tidak membutuhkan server MLflow localhost.
-        mlflow.set_tracking_uri("file:./mlruns")
-        logging.info("MLflow tracking URI set to local file store: file:./mlruns")
-
-    mlflow.set_experiment("Titanic Random Forest CI")
-
+        if os.getenv("MLFLOW_RUN_ID"):
+            logging.info("Running inside MLflow Project run. Using existing MLflow run.")
+        else:
+            mlflow.set_tracking_uri("file:./mlruns")
+            mlflow.set_experiment("Titanic Random Forest CI")
+            logging.info("MLflow tracking URI set to local file store: file:./mlruns")
 
 # =========================
 # DATA FUNCTIONS
@@ -304,7 +264,14 @@ def main():
         "min_samples_leaf": 1,
     }
 
-    with mlflow.start_run(run_name="ci_random_forest_model"):
+    active_run_id = os.getenv("MLFLOW_RUN_ID")
+
+    if active_run_id:
+        run_context = mlflow.start_run(run_id=active_run_id)
+    else:
+        run_context = mlflow.start_run(run_name="ci_random_forest_model")
+
+    with run_context:
         # Manual parameter logging
         mlflow.log_params(params)
 
